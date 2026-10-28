@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Voice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#121a22"/>
+      <stop offset="1" stop-color="#080c10"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
+      <stop offset="0" stop-color="#43e0cf" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#43e0cf" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+  <g fill="#43e0cf">
+    <rect x="146" y="172" width="46" height="168" rx="23" opacity="0.45" filter="url(#soft)"/>
+    <rect x="233" y="108" width="46" height="296" rx="23" opacity="0.45" filter="url(#soft)"/>
+    <rect x="320" y="156" width="46" height="200" rx="23" opacity="0.45" filter="url(#soft)"/>
+    <rect x="146" y="172" width="46" height="168" rx="23"/>
+    <rect x="233" y="108" width="46" height="296" rx="23"/>
+    <rect x="320" y="156" width="46" height="200" rx="23"/>
+  </g>
+</svg>
