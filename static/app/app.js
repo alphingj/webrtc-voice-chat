@@ -1249,7 +1249,8 @@
         : S.muted
           ? 'Unmute'
           : 'Mute';
-    $('mute-icon').textContent = audible ? '🎙️' : '🔇';
+    const muteIcon = $('mute-icon');
+    if (muteIcon) muteIcon.textContent = audible ? '🎙️' : '🔇';
     $('ptt-btn').classList.toggle('is-live', S.ptt && S.pttHeld);
     updateParticipantState('self');
   }
