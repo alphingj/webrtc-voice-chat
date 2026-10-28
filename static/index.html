@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, sans-serif;
+         background: #0b0d10; color: #e8eaed; height: 100vh; display: flex; flex-direction: column; }
+  .view { display: none; padding: 24px; }
+  .view.active { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.5px; }
+  .sub { color: #8a909c; font-size: 13px; margin-bottom: 24px; }
+  .card { background: #151922; border: 1px solid #262d38; border-radius: 16px;
+          padding: 24px; width: 100%; max-width: 420px; margin: 0 auto; }
+  label { font-size: 12px; color: #8a909c; display: block; margin-bottom: 6px; }
+  input[type=text], input[type=password] { width: 100%; background: #0f1219; border: 1px solid #2c3442;
+      border-radius: 10px; padding: 12px 14px; color: #e8eaed; font-size: 15px; margin-bottom: 14px; outline: none; }
+  input[type=text]:focus, input[type=password]:focus { border-color: #38bdf8; }
+  button { border: none; border-radius: 10px; padding: 12px 18px; font-size: 15px; font-weight: 600;
+           cursor: pointer; transition: filter 0.1s; }
+  button:active { filter: brightness(0.9); }
+  .btn-primary { background: #22d3ee; color: #05252a; }
+  .btn-ghost { background: transparent; border: 1px solid #2c3442; color: #e8eaed; }
+  .btn-danger { background: #ef4444; color: #fff; }
+  .row { display: flex; gap: 10px; margin-bottom: 14px; }
+  .row > * { flex: 1; }
+  .error { color: #f87171; font-size: 12px; min-height: 16px; margin-top: -8px; margin-bottom: 14px; }
+
+  /* room view */
+  header { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; }
+  .room-title h2 { margin: 0; font-size: 18px; }
+  .room-title .meta { font-size: 12px; color: #8a909c; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #1f2937; color: #8a909c; }
+  .badge.live { background: #14532d; color: #4ade80; }
+  .badge.connecting { background: #7c3aed; color: #a78bfa; }
+
+  #participants { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 12px 0; }
+  .participant { background: #151922; border: 1px solid #262d38; border-radius: 12px;
+                 padding: 10px 14px; display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; background: #22d3ee; color: #05252a;
+            display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; flex-shrink: 0; }
+  .p-info { flex: 1; min-width: 0; }
+  .p-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-state { font-size: 12px; color: #8a909c; }
+  .p-state.live { color: #4ade80; }
+  .p-muted { color: #fbbf24; }
+  .controls { display: flex; gap: 12px; padding-top: 12px; border-top: 1px solid #262d38; }
+  .control { flex: 1; padding: 14px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+  .mute-on { background: #7f1d1d; color: #fff; }
+  .mute-off { background: #1f2937; color: #e8eaed; border: 1px solid #2c3442; }
+  .volume-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .volume-wrap input[type=range] { width: 80px; accent-color: #22d3ee; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="view-login" class="view active">
+  <div class="card">
+    <h1>Voice</h1>
+    <p class="sub">Private voice rooms over Tailscale</p>
+    <div id="login-error" class="error"></div>
+    <label>Username</label>
+    <input id="username" type="text" placeholder="you" maxlength="24" value="user">
+    <label>Room</label>
+    <input id="room" type="text" placeholder="main" maxlength="32" value="main">
+    <button id="btn-join" class="btn-primary row">Join room</button>
+  </div>
+</div>
+
+<div id="view-room" class="view">
+  <header>
+    <button id="btn-leave" class="btn-ghost">← Leave</button>
+    <div class="room-title">
+      <h2 id="room-name">Room</h2>
+      <div class="meta"><span id="room-count">0/0</span> · <span id="conn-badge" class="badge connecting">connecting</span></div>
+    </div>
+    <div id="remote-audio" style="display:none"></div>
+  </header>
+
+  <div id="participants"></div>
+
+  <div class="controls">
+    <button id="btn-mute" class="control mute-off" aria-pressed="false">🎙️ Mute</button>
+    <div class="volume-wrap">
+      <span style="font-size:12px;color:#8a909c">you</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const WS_URL = `wss://${location.hostname}:${location.port}/ws`;
+
+let ws, me, room, localStream, pcs = new Map(), volumes = new Map(), analyser = null, speakingTimer = null;
+
+// ----- auth / join -----
+$("#btn-join").onclick = async () => {
+  const name = $("#username").value.trim() || "user";
+  room = $("#room").value.trim() || "main";
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    setupAnalyser(localStream);
+  } catch (e) {
+    $("#login-error").textContent = "Microphone access required.";
+    return;
+  }
+  openSocket(name);
+};
+
+function openSocket(name) {
+  ws = new WebSocket(WS_URL);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => ws.send(JSON.stringify({ type: "join", room, name }));
+  ws.onmessage = onSignal;
+  ws.onclose = () => {
+    setConn("connecting");
+    setTimeout(openSocket, 3000); // auto-rejoin
+  };
+}
+
+function onSignal(ev) {
+  const m = JSON.parse(ev.data);
+  switch (m.type) {
+    case "joined":
+      me = m.id;
+      $("#room-name").textContent = m.room;
+      $("#view-login").classList.add("hidden");
+      $("#view-room").classList.add("active");
+      m.peers.forEach(p => addPeer(p.id, p.name, false));
+      setConn("live");
+      m.peers.forEach(p => offerTo(p.id));
+      break;
+    case "peer-joined":
+      addPeer(m.id, m.name, true);
+      break;
+    case "peer-left":
+      removePeer(m.id);
+      break;
+    case "offer":
+      answerFrom(m.from, m.sdp);
+      break;
+    case "answer":
+      handleAnswer(m.from, m.sdp);
+      break;
+    case "candidate":
+      addCandidate(m.from, m.candidate);
+      break;
+    case "mute-state":
+      setRemoteMute(m.id, m.muted);
+      break;
+  }
+}
+
+// ----- WebRTC -----
+function pcFor(id, initiator) {
+  const pc = new RTCPeerConnection({ iceServers: [] });
+  localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.ontrack = e => {
+    const el = document.getElementById("audio-" + id);
+    if (!el) {
+      const a = document.createElement("audio");
+      a.id = "audio-" + id;
+      a.autoplay = true;
+      document.getElementById("remote-audio").appendChild(a);
+    }
+    document.getElementById("audio-" + id).srcObject = e.streams[0];
+  };
+  pc.onconnectionstatechange = () => {
+    const st = document.querySelector(`.participant[data-peer="${id}"] .p-state`);
+    if (!st) return;
+    st.textContent = pc.connectionState === "connected" ? "live" : (pc.connectionState === "failed" ? "retrying" : "connecting");
+    st.className = "p-state" + (pc.connectionState === "connected" ? " live" : pc.connectionState === "failed" ? " failed" : "");
+  };
+  pc.onicecandidate = e => {
+    if (e.candidate) ws.send(JSON.stringify({ type: "candidate", to: id, candidate: e.candidate }));
+  };
+  pcs.set(id, pc);
+  return pc;
+}
+
+async function offerTo(id) {
+  const pc = pcFor(id, true);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify({ type: "offer", to: id, sdp: offer }));
+}
+
+async function answerFrom(id, sdp) {
+  const pc = pcFor(id, false);
+  await pc.setRemoteDescription(sdp);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  ws.send(JSON.stringify({ type: "answer", to: id, sdp: answer }));
+}
+
+async function handleAnswer(id, sdp) {
+  const pc = pcs.get(id);
+  if (pc) await pc.setRemoteDescription(sdp);
+}
+
+async function addCandidate(id, cand) {
+  const pc = pcs.get(id);
+  if (pc) await pc.addIceCandidate(cand);
+}
+
+// ----- UI -----
+function addPeer(id, name, announce) {
+  if (document.querySelector(`.participant[data-peer="${id}"]`)) return;
+  const div = document.createElement("div");
+  div.className = "participant";
+  div.dataset.peer = id;
+  div.innerHTML = `
+    <div class="avatar">${initial(name)}</div>
+    <div class="p-info">
+      <div class="p-name">${escapeHtml(name)}${id === me ? " (you)" : ""}</div>
+      <div class="p-state">${id === me ? "you" : "connecting"}</div>
+    </div>
+    <div class="volume-wrap"><input type="range" min="0" max="100" value="100"></div>
+  `;
+  const slider = div.querySelector("input");
+  slider.oninput = () => {
+    const el = document.getElementById("audio-" + id);
+    if (el) el.volume = slider.value / 100;
+    volumes.set(id, slider.value / 100);
+  };
+  volumes.set(id, 1);
+  document.getElementById("participants").appendChild(div);
+  $("#room-count").textContent = (document.querySelectorAll(".participant").length) + "/6";
+  if (announce) {
+    const st = div.querySelector(".p-state");
+    st.textContent = "joined";
+    setTimeout(() => st.textContent = "connecting", 800);
+  }
+}
+
+function removePeer(id) {
+  const el = document.querySelector(`.participant[data-peer="${id}"]`);
+  if (el) el.remove();
+  const pc = pcs.get(id);
+  if (pc) { try { pc.close(); } catch {} pcs.delete(id); }
+  const a = document.getElementById("audio-" + id);
+  if (a) a.remove();
+  $("#room-count").textContent = (document.querySelectorAll(".participant").length) + "/6";
+}
+
+function setRemoteMute(id, muted) {
+  const row = document.querySelector(`.participant[data-peer="${id}"]`);
+  if (!row) return;
+  const st = row.querySelector(".p-state");
+  st.textContent = muted ? "muted" : "live";
+  st.className = "p-state" + (muted ? " p-muted" : " live");
+}
+
+function setConn(s) {
+  const b = $("#conn-badge");
+  b.textContent = s === "live" ? "live" : (s === "failed" ? "retrying" : "connecting");
+  b.className = "badge " + (s === "live" ? "live" : "connecting");
+}
+
+// ----- local mic -----
+let muted = false;
+$("#btn-mute").onclick = () => {
+  muted = !muted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !muted);
+  $("#btn-mute").className = "control " + (muted ? "mute-on" : "mute-off");
+  $("#btn-mute").setAttribute("aria-pressed", muted);
+  ws.send(JSON.stringify({ type: "mute", muted }));
+};
+
+// speaking indicator (local only)
+function setupAnalyser(stream) {
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === "suspended") ac.resume();
+  const src = ac.createMediaStreamSource(stream);
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 256;
+  src.connect(analyser);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  speakingTimer = setInterval(() => {
+    analyser.getByteFrequencyData(data);
+    let sum = 0; for (let v of data) sum += v;
+    const loud = sum / data.length > 40;
+    const row = document.querySelector('.participant[data-peer="' + me + '"]');
+    if (row) {
+      const st = row.querySelector(".p-state");
+      if (!muted && loud) st.textContent = "speaking";
+      else if (!muted) st.textContent = "live";
+    }
+  }, 200);
+}
+
+function initial(n) { return n ? n[0].toUpperCase() : "?"; }
+function escapeHtml(t) { return t.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+
+// ----- leave -----
+$("#btn-leave").onclick = () => {
+  try { ws.send(JSON.stringify({ type: "leave" })); } catch {}
+  try { ws.close(); } catch {}
+  pcs.forEach(pc => { try { pc.close(); } catch {} });
+  pcs.clear();
+  localStream.getTracks().forEach(t => t.stop());
+  if (speakingTimer) clearInterval(speakingTimer);
+  $("#view-room").classList.remove("active");
+  $("#view-login").classList.remove("hidden");
+};
+</script>
+</body>
+</html>
