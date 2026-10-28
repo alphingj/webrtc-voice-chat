@@ -1,23 +1,9 @@
 # Runtime data — never commit
-voice.db
-voice.db-wal
-voice.db-shm
+certs/
 *.db
 *.db-wal
 *.db-shm
-certs/
-
-# Python
 __pycache__/
 *.pyc
 *.pyo
-
-# Logs and local scratch
 *.log
-build/
-devices.tsv
-*.bak
-
-# Editors
-.vscode/
-.idea/
