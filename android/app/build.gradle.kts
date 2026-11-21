@@ -13,10 +13,17 @@ android {
         // Reverse-DNS of call.carematch.co.in (Kotlin package is `carematch.voice`;
         // `in` is a Kotlin keyword so it is not used as a package segment).
         applicationId = "in.co.carematch.voice"
-        minSdk = 26
+        // API 24+ (Android 7, 2016) covers the old armv7 phones still in use.
+        minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "2.0.0"
+
+        // Universal APK: ship native libs for every ABI in ONE apk so the
+        // same file installs on armv7, arm64, and x86 devices/emulators.
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -61,6 +68,15 @@ android {
             } else {
                 signingConfigs.getByName("release")
             }
+        }
+    }
+
+    // No per-ABI splits: one universal APK for all devices.
+    splits {
+        abi {
+            isEnable = false
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         }
     }
 

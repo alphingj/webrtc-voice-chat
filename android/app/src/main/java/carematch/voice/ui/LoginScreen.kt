@@ -134,7 +134,7 @@ fun LoginScreen(
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Android app", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "Prefer native audio/video? Install the APK (v1.0.0) — same rooms, same server: $apkUrl",
+                    "Prefer native audio/video? Install the APK (v2.0.0, universal: armv7/arm64/x86) — same rooms, same server: $apkUrl",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
