@@ -89,19 +89,19 @@ class ProtocolTest {
 
     @Test
     fun parseIceServers_handlesLiveConfigShape() {
-        // Shape observed from GET https://call.carematch.co.in/config:
-        // static entries use arrays, Metered entries use a single string.
+        // Shape served by GET /config: entries use arrays, but a single
+        // string for `urls` must also be tolerated.
         val config = """{"iceServers":[
             {"urls":["stun:100.87.117.55:3478","stun:192.168.1.42:3478"]},
             {"urls":["turn:100.87.117.55:3478"],"username":"voice","credential":"secret"},
-            {"urls":"stun:stun.relay.metered.ca:80"},
-            {"urls":"turn:global.relay.metered.ca:80","username":"u","credential":"p"}
+            {"urls":"stun:192.168.1.42:3478"},
+            {"urls":"turn:192.168.1.42:3478","username":"u","credential":"p"}
         ],"turnConfigured":true}"""
         val ice = parseIceServers(config)
         assertEquals(4, ice.size)
         assertEquals(listOf("stun:100.87.117.55:3478", "stun:192.168.1.42:3478"), ice[0].urls)
         assertEquals("voice", ice[1].username)
-        assertEquals(listOf("stun:stun.relay.metered.ca:80"), ice[2].urls)
+        assertEquals(listOf("stun:192.168.1.42:3478"), ice[2].urls)
     }
 
     @Test

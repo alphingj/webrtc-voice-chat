@@ -3,7 +3,7 @@
 Same single-file shape as ../server.py, plus:
 - video: still mesh, client sends video tracks (server unchanged)
 - chat: relay + short in-memory history per room
-- TURN: /config endpoint serving Metered.ca ICE servers from env or turn_config.json
+- TURN: /config endpoint serving self-hosted ICE servers from turn_config.json
 Signaling only — media goes peer-to-peer (or via TURN relay), never through this server.
 """
 import asyncio
@@ -12,7 +12,6 @@ import os
 import ssl
 import subprocess
 import time
-import urllib.request
 import uuid
 
 from aiohttp import web
@@ -62,10 +61,6 @@ def read_admin_pin():
     return os.environ.get("ADMIN_PIN", "")
 
 
-TURN_CACHE_SECS = 3600
-_turn_cache = {"at": 0.0, "ice": None}
-
-
 def read_static_turn():
     """Static TURN credentials: turn_config.json > env vars. Returns (ice, ok)."""
     urls, username, credential = [], "", ""
@@ -81,17 +76,19 @@ def read_static_turn():
         except Exception as e:
             print(f"turn_config.json unreadable: {e}")
     if not urls:
-        raw = os.environ.get("METERED_TURN_URLS", "")
+        # TURN_* are the current names; METERED_* still honored for old setups.
+        raw = os.environ.get("TURN_URLS", os.environ.get("METERED_TURN_URLS", ""))
         urls = [u.strip() for u in raw.split(",") if u.strip()]
-        username = os.environ.get("METERED_TURN_USERNAME", "")
-        credential = os.environ.get("METERED_TURN_CREDENTIAL", "")
+        username = os.environ.get("TURN_USERNAME", os.environ.get("METERED_TURN_USERNAME", ""))
+        credential = os.environ.get("TURN_CREDENTIAL", os.environ.get("METERED_TURN_CREDENTIAL", ""))
     if isinstance(urls, str):
         urls = [u.strip() for u in urls.split(",") if u.strip()]
     stun_urls = [u for u in urls if u.startswith("stun:")]
     turn_urls = [u for u in urls if not u.startswith("stun:")]
     if not stun_urls:
         stun_urls = [os.environ.get(
-            "METERED_STUN_URL", "stun:stun.metered.ca:80")]
+            "TURN_STUN_URL", os.environ.get(
+                "METERED_STUN_URL", "stun:100.87.117.55:3478"))]
     ice = [{"urls": stun_urls}]
     if turn_urls and username and credential:
         ice.append({"urls": turn_urls, "username": username,
@@ -99,67 +96,19 @@ def read_static_turn():
     return ice, bool(turn_urls and username and credential)
 
 
-def read_api_key():
-    """Metered REST API key: turn_config.json (apiKey) > METERED_API_KEY env."""
-    if os.path.exists(TURN_JSON):
-        try:
-            with open(TURN_JSON) as f:
-                return json.load(f).get("apiKey", "")
-        except Exception:
-            pass
-    return os.environ.get("METERED_API_KEY", "")
-
-
-def fetch_metered_ice(api_key):
-    """Fetch fresh iceServers from Metered REST API (vexcall app)."""
-    url = ("https://vexcall.metered.live/api/v1/turn/credentials"
-           f"?apiKey={api_key}")
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=10) as r:
-        ice = json.loads(r.read().decode())
-    if not isinstance(ice, list) or not ice:
-        raise ValueError("bad iceServers from metered API")
-    return ice
-
-
 def load_turn_config():
-    """Synchronous ICE servers for startup logging. Prefers cache/static."""
-    if _turn_cache["ice"]:
-        return _turn_cache["ice"], True
+    """Synchronous ICE servers for startup logging."""
     return read_static_turn()
 
 
 async def get_ice_servers():
-    """ICE servers: self-hosted static TURN first, Metered API appended as fallback.
+    """ICE servers: self-hosted static config only (turn_config.json).
 
-    Static (your Pi) costs nothing, so it goes first — browsers try every
-    entry and use what works. Metered stays as fallback for visitors who
-    cannot reach the Pi directly (e.g. public URL over symmetric NAT).
+    Deliberately no third-party fallback: all relay traffic stays on the
+    local coturn instance. Every client is expected to reach the Pi
+    directly (Tailscale or LAN).
     """
-    static_ice, static_ok = read_static_turn()
-    api_key = read_api_key()
-    api_ice, api_ok = [], False
-    if api_key:
-        age = time.time() - _turn_cache["at"]
-        if _turn_cache["ice"] and age < TURN_CACHE_SECS:
-            api_ice, api_ok = _turn_cache["ice"], True
-        else:
-            try:
-                api_ice = await asyncio.to_thread(fetch_metered_ice, api_key)
-                _turn_cache.update(at=time.time(), ice=api_ice)
-                api_ok = True
-            except Exception as e:
-                print(f"metered API failed ({e}), using static only")
-                if _turn_cache["ice"]:
-                    api_ice, api_ok = _turn_cache["ice"], True
-    seen = set()
-    ice = []
-    for entry in static_ice + api_ice:
-        key = json.dumps(entry, sort_keys=True)
-        if key not in seen:
-            seen.add(key)
-            ice.append(entry)
-    return ice, bool(static_ok or api_ok)
+    return read_static_turn()
 
 
 TURN_BIN = os.environ.get("TURN_BIN", "turnserver")
@@ -194,7 +143,7 @@ def start_turnserver():
         print("port 3478 already served (system coturn?) — leaving it alone")
         return "external"
     if not os.path.exists(TURN_CONF):
-        print(f"no {TURN_CONF} — self-hosted TURN off, using Metered fallback")
+        print(f"no {TURN_CONF} — coturn autostart off; relay needs an external coturn")
         return None
     if TURN_START_TRIES >= 3:
         return None
@@ -305,11 +254,8 @@ async def config_handler(request):
 
 async def stats_handler(request):
     """Live stats without touching the network: rooms, peers, uptime, TURN mode."""
-    if read_api_key() or _turn_cache["ice"]:
-        mode = "metered-api"
-    else:
-        _, static_ok = read_static_turn()
-        mode = "static" if static_ok else "off"
+    _, static_ok = read_static_turn()
+    mode = "static" if static_ok else "off"
     return web.json_response({
         "service": VERSION,
         "uptime_s": int(time.time() - STARTED),

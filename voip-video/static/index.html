@@ -208,7 +208,7 @@
 <div id="view-login" class="view active">
   <div class="card">
     <h1>Voice + Video</h1>
-    <p class="sub">Private rooms over Tailscale, relay via Metered when needed</p>
+    <p class="sub">Private rooms over Tailscale, relay via on-site TURN</p>
     <div id="login-error" class="error"></div>
     <label>Username</label>
     <input id="username" type="text" placeholder="you" maxlength="24" value="user">
@@ -331,7 +331,7 @@ const $ = s => document.querySelector(s);
 const WS_URL = `wss://${location.hostname}:${location.port}/ws`;
 
 let ws, me, room, myName, localStream, pcs = new Map();
-let iceServers = [{ urls: "stun:stun.metered.ca:80" }];
+let iceServers = [{ urls: ["stun:100.87.117.55:3478", "stun:192.168.1.42:3478"] }];
 let turnOn = false;
 let muted = false, cameraOff = false;
 let analyser = null, speakingTimer = null;
@@ -340,7 +340,7 @@ let analyser = null, speakingTimer = null;
 fetch("/config").then(r => r.json()).then(c => {
   iceServers = c.iceServers || iceServers;
   turnOn = !!c.turnConfigured;
-  $("#turn-status").innerHTML = turnOn ? "TURN: <b>relay ready (metered.ca)</b>" : "TURN: <b class='off'>not set — direct only</b>";
+  $("#turn-status").innerHTML = turnOn ? "TURN: <b>relay ready (self-hosted)</b>" : "TURN: <b class='off'>not set — direct only</b>";
   $("#turn-badge").textContent = turnOn ? "turn relay" : "direct only";
 }).catch(() => {
   $("#turn-status").innerHTML = "TURN: <b class='off'>unreachable</b>";

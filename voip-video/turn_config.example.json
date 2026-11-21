@@ -1,0 +1,14 @@
+{
+  "comment": "Copy to turn_config.json. Static section = SELF-HOSTED Pi TURN, the only relay. Never commit turn_config.json.",
+  "urls": [
+    "stun:100.87.117.55:3478",
+    "stun:192.168.1.42:3478",
+    "turn:100.87.117.55:3478",
+    "turn:192.168.1.42:3478",
+    "turn:100.87.117.55:3478?transport=tcp",
+    "turn:192.168.1.42:3478?transport=tcp"
+  ],
+  "username": "voice (must match turnserver.conf user= line)",
+  "credential": "SAME_PASSWORD_AS_turnserver.conf",
+  "adminPin": "SET_A_PIN_HERE (enables the Admin panel; empty = disabled)"
+}

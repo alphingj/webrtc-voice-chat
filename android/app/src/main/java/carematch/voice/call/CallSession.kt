@@ -105,7 +105,7 @@ class CallSession(
     private var mode = "full"
     private var audioOnly = false
     private var quality = Quality.MED
-    private var ice: List<IceServer> = listOf(IceServer(listOf("stun:stun.metered.ca:80")))
+    private var ice: List<IceServer> = listOf(IceServer(listOf("stun:100.87.117.55:3478", "stun:192.168.1.42:3478")))
     private var live = false
 
     fun join(host: String, room: String, name: String, mode: String, audioOnly: Boolean, quality: Quality) {
