@@ -1,5 +1,22 @@
 # Runtime data — never commit
 certs/
+# Android: built APKs, keystores and local SDK paths are never committed.
+# Publish an APK by copying it to voip-video/static/voice.apk on the server.
+*.apk
+*.aab
+*.jks
+*.keystore
+android/local.properties
+android/.gradle/
+.gradle-home/
+# Live secrets / runtime state inside voip-video/ — never commit.
+voip-video/turn_config.json
+voip-video/certs/
+voip-video/__pycache__/
+voip-video/*.log
+voip-video/turnserver.log
+android/build/
+android/app/build/
 *.db
 *.db-wal
 *.db-shm

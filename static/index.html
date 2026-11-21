@@ -9,7 +9,8 @@
   body { margin: 0; font-family: system-ui, -apple-system, sans-serif;
          background: #0b0d10; color: #e8eaed; height: 100vh; display: flex; flex-direction: column; }
   .view { display: none; padding: 24px; }
-  .view.active { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .view.active { display: flex; flex-direction: column; height: 100%; overflow-y: auto;
+                 scrollbar-gutter: stable; }
   h1 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.5px; }
   .sub { color: #8a909c; font-size: 13px; margin-bottom: 24px; }
   .card { background: #151922; border: 1px solid #262d38; border-radius: 16px;
