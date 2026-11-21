@@ -1,0 +1,24 @@
+# Self-hosted TURN (coturn) for voice+video.
+# Setup on the Pi:
+#   sudo apt install -y coturn
+#   cp turnserver.conf.example turnserver.conf
+#   python3 -c "import secrets; print(secrets.token_urlsafe(24))"  -> paste below
+#   (then put the same username/password in turn_config.json static urls)
+# Never commit turnserver.conf (it holds the password).
+listening-port=3478
+listening-ip=0.0.0.0
+realm=voip
+server-name=voip
+fingerprint
+lt-cred-mech
+user=voice:REPLACE_WITH_STRONG_PASSWORD
+# Relay only between Tailscale + home LAN peers (abuse containment).
+# Anyone who can reach this port can spend your bandwidth, so keep it tight.
+allowed-peer-ip=100.64.0.0/10
+allowed-peer-ip=192.168.0.0/16
+no-multicast-peers
+# Bandwidth guard (~8 concurrent 720p calls at ~2.5 Mbps each).
+max-bps=20000000
+stale-nonce=600
+log-file=stdout
+simple-log

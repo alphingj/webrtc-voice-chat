@@ -1,0 +1,11 @@
+# Runtime data — never commit
+certs/
+turn_config.json
+turnserver.conf
+*.db
+*.db-wal
+*.db-shm
+__pycache__/
+*.pyc
+*.pyo
+*.log

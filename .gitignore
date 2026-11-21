@@ -24,3 +24,6 @@ __pycache__/
 *.pyc
 *.pyo
 *.log
+# Local-only artifacts kept on disk, not part of the shipped project.
+presentation/
+.reticle/
