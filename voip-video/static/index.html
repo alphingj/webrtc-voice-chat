@@ -239,8 +239,8 @@
     <div class="apk-block">
       <div class="apk-title">Android app</div>
       <div class="apk-sub">Native audio/video — same rooms, same server.</div>
-      <a class="apk-btn" id="btn-apk" href="https://github.com/alphingj/webrtc-voice-chat/releases/latest/download/voice.apk">Install APK · v2.1.0 (universal)</a>
-      <div class="apk-hash" id="apk-hash">Fast CDN download · <a href="https://github.com/alphingj/webrtc-voice-chat/releases/latest">verify SHA-256 on the release page</a></div>
+      <a class="apk-btn" id="btn-apk" href="https://dl.carematch.co.in/voice.apk">Install APK · v2.1.0 (universal)</a>
+      <div class="apk-hash" id="apk-hash">Fast CDN download · sha256 e141744c34e68a8990fabc14577fbda57fa1bf032b0a20b788d5ccf4abae869a</div>
     </div>
   </div>
 </div>
@@ -346,9 +346,9 @@ fetch("/config").then(r => r.json()).then(c => {
   $("#turn-status").innerHTML = "TURN: <b class='off'>unreachable</b>";
 });
 
-// APK is hosted on GitHub Releases (CDN) so downloads don't depend on the
-// Pi's home uplink. The button above links straight at the latest release
-// asset; /download on this server remains as a local fallback while staged.
+// APK is hosted on Cloudflare R2 (dl.carematch.co.in) so downloads don't
+// depend on the Pi's home uplink. /download on this server remains as a
+// local fallback while an APK is still staged there.
 
 const QMAP = {
   high: { width: { ideal: 1280 }, height: { ideal: 720 } },
