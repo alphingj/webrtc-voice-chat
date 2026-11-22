@@ -21,8 +21,8 @@ class IdentityStore(private val context: Context) {
     suspend fun load(): Identity {
         val p = context.prefs.data.first()
         return Identity(
-            p[KEY_NAME] ?: "user",
-            p[KEY_ROOM] ?: "main",
+            p[KEY_NAME] ?: "",
+            p[KEY_ROOM] ?: "",
             p[KEY_RECENT]?.sorted().orEmpty()
         )
     }
@@ -40,6 +40,6 @@ class IdentityStore(private val context: Context) {
     }
 
     fun watch() = context.prefs.data.map { p ->
-        Identity(p[KEY_NAME] ?: "user", p[KEY_ROOM] ?: "main", p[KEY_RECENT]?.sorted().orEmpty())
+        Identity(p[KEY_NAME] ?: "", p[KEY_ROOM] ?: "", p[KEY_RECENT]?.sorted().orEmpty())
     }
 }

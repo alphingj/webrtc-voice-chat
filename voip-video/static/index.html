@@ -211,9 +211,9 @@
     <p class="sub">Private rooms over Tailscale, relay via on-site TURN</p>
     <div id="login-error" class="error"></div>
     <label>Username</label>
-    <input id="username" type="text" placeholder="you" maxlength="24" value="user">
+    <input id="username" type="text" placeholder="you" maxlength="24" autocomplete="off">
     <label>Room</label>
-    <input id="room" type="text" placeholder="main" maxlength="32" value="main">
+    <input id="room" type="text" placeholder="room name" maxlength="32" autocomplete="off">
     <label>Join as</label>
     <div class="seg">
       <button id="mode-video" class="segbtn on" type="button">Video</button>
@@ -231,7 +231,7 @@
     <button id="btn-join" class="btn-primary">Join room</button>
 
     <div id="recent-wrap">
-      <div class="turn-line" style="text-align:left;margin:12px 0 6px">Recent rooms</div>
+      <div class="turn-line" style="text-align:left;margin:12px 0 6px">Recent rooms — tap to join</div>
       <div id="recent-rooms"></div>
     </div>
     <div class="turn-line" id="turn-status">TURN: checking…</div>
@@ -239,7 +239,7 @@
     <div class="apk-block">
       <div class="apk-title">Android app</div>
       <div class="apk-sub">Native audio/video — same rooms, same server.</div>
-      <a class="apk-btn disabled" id="btn-apk" href="/download">Install APK · v2.0.0 (universal)</a>
+      <a class="apk-btn disabled" id="btn-apk" href="/download">Install APK · v2.1.0 (universal)</a>
       <div class="apk-hash" id="apk-hash">checking build…</div>
     </div>
   </div>
@@ -367,8 +367,18 @@ const QMAP = {
 };
 
 $("#btn-join").onclick = async () => {
-  myName = $("#username").value.trim() || "user";
-  room = $("#room").value.trim() || "main";
+  myName = $("#username").value.trim();
+  room = $("#room").value.trim();
+  if (!myName) {
+    $("#login-error").textContent = "Enter a username first.";
+    $("#username").focus();
+    return;
+  }
+  if (!room) {
+    $("#login-error").textContent = "Enter a room name.";
+    $("#room").focus();
+    return;
+  }
   joinRefused = false;
   wantLive = true;
   $("#login-error").textContent = "";
@@ -795,7 +805,7 @@ function renderRecent() {
   rooms.forEach(r => {
     const b = document.createElement("button");
     b.className = "chip"; b.textContent = r;
-    b.onclick = () => { $("#room").value = r; };
+    b.onclick = () => { $("#room").value = r; $("#btn-join").click(); };
     box.appendChild(b);
   });
   $("#recent-wrap").style.display = rooms.length ? "" : "none";

@@ -1,9 +1,7 @@
 package carematch.voice
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -71,11 +69,10 @@ class MainActivity : ComponentActivity() {
                 val id = idState
                 if (!inCall || session == null) {
                     LoginScreen(
-                        initialName = id?.name ?: "user",
-                        initialRoom = id?.room ?: "main",
+                        initialName = id?.name ?: "",
+                        initialRoom = id?.room ?: "",
                         recentRooms = id?.recent.orEmpty(),
                         turnStatus = turnStatus,
-                        apkUrl = "https://$DEFAULT_HOST/download",
                         onJoin = { name, room, mode, audioOnly, quality ->
                             lifecycleScope.launch {
                                 identity.save(name, room)
@@ -105,9 +102,6 @@ class MainActivity : ComponentActivity() {
                                     permLauncher.launch(missing.toTypedArray())
                                 }
                             }
-                        },
-                        onInstallApk = {
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://$DEFAULT_HOST/download")))
                         }
                     )
                 } else {

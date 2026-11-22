@@ -65,9 +65,9 @@
     <p class="sub">Private voice rooms over Tailscale</p>
     <div id="login-error" class="error"></div>
     <label>Username</label>
-    <input id="username" type="text" placeholder="you" maxlength="24" value="user">
+    <input id="username" type="text" placeholder="you" maxlength="24" autocomplete="off">
     <label>Room</label>
-    <input id="room" type="text" placeholder="main" maxlength="32" value="main">
+    <input id="room" type="text" placeholder="room name" maxlength="32" autocomplete="off">
     <button id="btn-join" class="btn-primary row">Join room</button>
   </div>
 </div>
@@ -100,8 +100,10 @@ let ws, me, room, localStream, pcs = new Map(), volumes = new Map(), analyser = 
 
 // ----- auth / join -----
 $("#btn-join").onclick = async () => {
-  const name = $("#username").value.trim() || "user";
-  room = $("#room").value.trim() || "main";
+  const name = $("#username").value.trim();
+  room = $("#room").value.trim();
+  if (!name) { $("#login-error").textContent = "Enter a username first."; $("#username").focus(); return; }
+  if (!room) { $("#login-error").textContent = "Enter a room name."; $("#room").focus(); return; }
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     setupAnalyser(localStream);
