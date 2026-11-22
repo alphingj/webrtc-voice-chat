@@ -16,8 +16,8 @@ android {
         // API 24+ (Android 7, 2016) covers the old armv7 phones still in use.
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "2.2.0"
+        versionCode = 5
+        versionName = "2.2.1"
 
         // Universal APK: ship native libs for every ABI in ONE apk so the
         // same file installs on armv7, arm64, and x86 devices/emulators.
@@ -119,7 +119,7 @@ dependencies {
     // of Google's official Android build (commit pinned in its POM), the
     // newest Central-hosted build. Supply chain is pinned by
     // gradle/verification-metadata.xml — never bump blindly.
-    implementation("com.infobip:google-webrtc:1.0.45036")
+    implementation("com.infobip:google-webrtc:1.0.48228")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
