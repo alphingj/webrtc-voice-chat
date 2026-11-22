@@ -1,6 +1,7 @@
 package carematch.voice.call
 
 import android.content.Context
+import android.util.Log
 import carematch.voice.net.ChatItem
 import carematch.voice.net.IceServer
 import carematch.voice.net.Peer
@@ -65,6 +66,10 @@ class CallSession(
     private val scope: CoroutineScope,
 ) : SignalingClient.Listener {
 
+    private companion object {
+        const val TAG = "VoiceCall"
+    }
+
     private val rtc = RtcManager(appContext)
     private val signaling = SignalingClient(http, this)
 
@@ -118,14 +123,26 @@ class CallSession(
         live = true
         _room.value = room
         _conn.value = "connecting"
+        Log.i(TAG, "join start host=$host room=$room mode=$mode audioOnly=$audioOnly quality=$quality")
         scope.launch(Dispatchers.IO) {
             try {
                 rtc.ensureStarted(audioOnly || mode == "chat", quality)
+                Log.i(TAG, "media started (mic=${rtc.localAudio != null} cam=${rtc.localVideo != null})")
             } catch (t: Throwable) {
+                Log.e(TAG, "media start failed", t)
                 event("Media failed: ${t.message ?: "unknown"}")
                 return@launch
             }
-            val fetched = fetchIce()
+            // Never let a slow /config stall the join: cap the wait, then
+            // connect with whatever ICE we have (defaults are the Pi itself).
+            val t0 = System.currentTimeMillis()
+            val fetched = try {
+                kotlinx.coroutines.withTimeoutOrNull(8_000) { fetchIce() } ?: emptyList()
+            } catch (t: Throwable) {
+                Log.e(TAG, "ice fetch failed", t)
+                emptyList()
+            }
+            Log.i(TAG, "ice fetch done in ${System.currentTimeMillis() - t0}ms: ${fetched.size} servers")
             if (fetched.isNotEmpty()) ice = fetched
             withContext(Dispatchers.Main) {
                 if (!live) return@withContext
@@ -152,16 +169,24 @@ class CallSession(
     // ------------------------------------------------------------ signaling ---
 
     override fun onOpen() {
+        Log.i(TAG, "signaling open")
         _conn.value = "live"
     }
 
+    @Volatile private var wasLive = false
+
     override fun onClosed(willRetry: Boolean) {
+        Log.w(TAG, "signaling closed willRetry=$willRetry wasLive=$wasLive")
         _conn.value = if (willRetry) "connecting" else "closed"
+        if (willRetry && wasLive) event("Connection lost — reconnecting…")
+        if (!willRetry) wasLive = false
     }
 
     override fun onSignal(s: Signal) {
         when (s) {
             is Signal.Joined -> {
+                Log.i(TAG, "joined id=${s.id} room=${s.room} peers=${s.peers.size} history=${s.history.size}")
+                wasLive = true
                 _selfId.value = s.id
                 _room.value = s.room
                 _conn.value = "live"
@@ -244,7 +269,12 @@ class CallSession(
                 }
             }
 
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+                Log.i(TAG, "peer $id ICE state=$state")
+            }
+
             override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
+                Log.i(TAG, "peer $id connection state=$state")
                 val label = when (state) {
                     PeerConnection.PeerConnectionState.CONNECTED -> "live"
                     PeerConnection.PeerConnectionState.FAILED -> "retrying"
@@ -257,7 +287,6 @@ class CallSession(
                 }
             }
 
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {}
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
             override fun onSignalingChange(state: PeerConnection.SignalingState) {}

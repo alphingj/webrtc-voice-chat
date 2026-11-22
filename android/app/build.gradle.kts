@@ -16,8 +16,8 @@ android {
         // API 24+ (Android 7, 2016) covers the old armv7 phones still in use.
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "2.1.0"
+        versionCode = 4
+        versionName = "2.2.0"
 
         // Universal APK: ship native libs for every ABI in ONE apk so the
         // same file installs on armv7, arm64, and x86 devices/emulators.
