@@ -33,18 +33,36 @@ android {
     signingConfigs {
         debug {
             // Workspace-local debug keystore (the sandbox home is read-only).
-            // Local testing only; release uses an env-provided keystore.
             storeFile = file("../debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        release {
+            // Release keystore ONLY from env. Never commit one. Falls back to
+            // the debug key for local testing (same signature as debug builds).
+            def storePath = System.getenv("VOICE_STORE_FILE")
+            if (storePath) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("VOICE_STORE_PASSWORD")
+                keyAlias = System.getenv("VOICE_KEY_ALIAS")
+                keyPassword = System.getenv("VOICE_KEY_PASSWORD")
+            } else {
+                storeFile = file("../debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
         release {
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            signingConfig = signingConfigs.release
+            // Release builds are minified + shrunk like the native app was.
+            minifyEnabled = true
+            shrinkResources = true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
 }
