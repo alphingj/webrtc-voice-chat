@@ -239,8 +239,8 @@
     <div class="apk-block">
       <div class="apk-title">Android app</div>
       <div class="apk-sub">Native audio/video — same rooms, same server.</div>
-      <a class="apk-btn disabled" id="btn-apk" href="/download">Install APK · v2.1.0 (universal)</a>
-      <div class="apk-hash" id="apk-hash">checking build…</div>
+      <a class="apk-btn" id="btn-apk" href="https://github.com/alphingj/webrtc-voice-chat/releases/latest/download/voice.apk">Install APK · v2.1.0 (universal)</a>
+      <div class="apk-hash" id="apk-hash">Fast CDN download · <a href="https://github.com/alphingj/webrtc-voice-chat/releases/latest">verify SHA-256 on the release page</a></div>
     </div>
   </div>
 </div>
@@ -346,19 +346,9 @@ fetch("/config").then(r => r.json()).then(c => {
   $("#turn-status").innerHTML = "TURN: <b class='off'>unreachable</b>";
 });
 
-// APK publish state: enable the install button only when a build is live,
-// and show its checksum so installers can verify the download.
-fetch("/download/sha256").then(r => {
-  if (!r.ok) throw new Error("no build");
-  return r.json();
-}).then(h => {
-  const mb = (h.size / 1048576).toFixed(1);
-  $("#btn-apk").classList.remove("disabled");
-  $("#apk-hash").textContent = `sha256 ${h.sha256} · ${mb} MB`;
-}).catch(() => {
-  $("#btn-apk").classList.add("disabled");
-  $("#apk-hash").textContent = "no build published yet";
-});
+// APK is hosted on GitHub Releases (CDN) so downloads don't depend on the
+// Pi's home uplink. The button above links straight at the latest release
+// asset; /download on this server remains as a local fallback while staged.
 
 const QMAP = {
   high: { width: { ideal: 1280 }, height: { ideal: 720 } },
