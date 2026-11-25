@@ -7,6 +7,8 @@ Same single-file shape as ../server.py, plus:
 Signaling only — media goes peer-to-peer (or via TURN relay), never through this server.
 """
 import asyncio
+import hashlib
+import hmac
 import json
 import os
 import ssl
@@ -45,6 +47,31 @@ peer_info = {}
 chat_history = {}
 # locked rooms: new joins are refused with join-denied
 locked_rooms = set()
+# auth brute-force shield: { ip: [fails, banned_until] }
+auth_fail = {}
+# sha256 cache: recompute only when file changes
+_hash_cache = {"path": None, "mtime": 0, "size": -1, "sha": ""}
+
+
+def auth_check(ip):
+    """True if ip may attempt auth (rate-limited, temp ban)."""
+    now = time.time()
+    fails, until = auth_fail.get(ip, (0, 0.0))
+    if until > now:
+        return False
+    if fails >= 1000:
+        auth_fail.pop(ip, None)
+    return True
+
+
+def auth_note(ip, ok):
+    now = time.time()
+    if ok:
+        auth_fail.pop(ip, None)
+        return
+    fails, until = auth_fail.get(ip, (0, 0.0))
+    fails = fails + 1 if now - until < 3600 else 1
+    auth_fail[ip] = (fails, now + 60 if fails >= 5 else 0.0)
 STARTED = time.time()
 VERSION = "voice+video/8"
 
@@ -116,8 +143,8 @@ TURN_CONF = os.environ.get("TURN_CONF", os.path.join(BASE, "turnserver.conf"))
 TURN_START_TRIES = 0
 
 
-def turn_port_busy():
-    """True if something already answers TURN's port (e.g. system coturn)."""
+def _turn_port_busy_sync():
+    """Sync probe used off the event loop."""
     import socket
     s = socket.socket()
     s.settimeout(2)
@@ -133,36 +160,58 @@ def turn_port_busy():
             pass
 
 
-def start_turnserver():
+async def turn_port_busy():
+    """True if something already answers TURN's port (e.g. system coturn)."""
+    return await asyncio.to_thread(_turn_port_busy_sync)
+
+
+TURN_LAST_TRY = 0.0
+
+
+async def start_turnserver():
     """Run coturn as a child process so it autostarts with this service."""
-    global TURN_START_TRIES
+    global TURN_START_TRIES, TURN_LAST_TRY
     if os.environ.get("TURN_ENABLED", "1") != "1":
         print("turnserver disabled (TURN_ENABLED=0)")
         return None
-    if turn_port_busy():
+    if await turn_port_busy():
         print("port 3478 already served (system coturn?) — leaving it alone")
         return "external"
     if not os.path.exists(TURN_CONF):
         print(f"no {TURN_CONF} — coturn autostart off; relay needs an external coturn")
         return None
+    # reset crash counter if last attempt was >10 min ago (transient failure)
+    if time.time() - TURN_LAST_TRY > 600:
+        TURN_START_TRIES = 0
     if TURN_START_TRIES >= 3:
         return None
+    TURN_LAST_TRY = time.time()
     TURN_START_TRIES += 1
+    log_path = os.path.join(BASE, "turnserver.log")
+    try:
+        if os.path.exists(log_path) and os.path.getsize(log_path) > 5 * 1024 * 1024:
+            os.replace(log_path, log_path + ".1")
+    except Exception:
+        pass
+    logf = open(log_path, "ab")
     try:
         proc = subprocess.Popen(
             [TURN_BIN, "-c", TURN_CONF],
-            stdout=open(os.path.join(BASE, "turnserver.log"), "ab"),
+            stdout=logf,
             stderr=subprocess.STDOUT,
         )
-        print(f"turnserver started (pid {proc.pid})")
-        TURN_START_TRIES = 0
-        return proc
     except FileNotFoundError:
+        logf.close()
         print(f"{TURN_BIN} not found — install coturn (sudo apt install coturn)")
         return None
     except Exception as e:
+        logf.close()
         print(f"turnserver failed to start: {e}")
         return None
+    logf.close()  # child keeps its own dup; parent must not leak the fd
+    print(f"turnserver started (pid {proc.pid})")
+    TURN_START_TRIES = 0
+    return proc
 
 
 def ensure_cert():
@@ -233,17 +282,23 @@ async def download_handler(request):
 
 
 async def download_hash_handler(request):
-    import hashlib
     if not os.path.exists(APK_FILE):
         return web.json_response({"error": "no APK published yet"}, status=404)
-    h = hashlib.sha256()
-    with open(APK_FILE, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
+    try:
+        st = os.stat(APK_FILE)
+    except OSError:
+        return web.json_response({"error": "no APK published yet"}, status=404)
+    c = _hash_cache
+    if c["path"] != APK_FILE or c["mtime"] != st.st_mtime or c["size"] != st.st_size:
+        h = hashlib.sha256()
+        with open(APK_FILE, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        c.update(path=APK_FILE, mtime=st.st_mtime, size=st.st_size, sha=h.hexdigest())
     return web.json_response({
         "file": os.path.basename(APK_FILE),
-        "sha256": h.hexdigest(),
-        "size": os.path.getsize(APK_FILE),
+        "sha256": c["sha"],
+        "size": c["size"],
     })
 
 
@@ -254,6 +309,9 @@ async def config_handler(request):
 
 async def stats_handler(request):
     """Live stats without touching the network: rooms, peers, uptime, TURN mode."""
+    real = read_admin_pin()
+    if real and not hmac.compare_digest(request.headers.get("X-Admin-Pin", ""), real):
+        return web.json_response({"error": "admin only"}, status=403)
     _, static_ok = read_static_turn()
     mode = "static" if static_ok else "off"
     return web.json_response({
@@ -266,7 +324,9 @@ async def stats_handler(request):
         "peers": len(peer_info),
         "rooms": {
             room: [{"id": peer_info[o]["id"], "name": peer_info[o]["name"],
-                    "mode": peer_info[o].get("mode", "full")}
+                    "mode": peer_info[o].get("mode", "full"),
+                    "muted": bool(peer_info[o].get("muted", False)),
+                    "cameraOff": bool(peer_info[o].get("cameraOff", False))}
                    for o in ws_set if peer_info.get(o, {}).get("name")]
             for room, ws_set in rooms.items()
         },
@@ -289,7 +349,8 @@ async def ws_handler(request):
 
     peer_id = str(uuid.uuid4())[:8]
     peer_info[ws] = {"id": peer_id, "name": None, "room": None,
-                       "open": True, "admin": False, "mode": "full"}
+                       "open": True, "admin": False, "mode": "full",
+                       "muted": False, "cameraOff": False}
     print(f"ws open {peer_id} from {request.remote}")
 
     try:
@@ -319,7 +380,9 @@ async def ws_handler(request):
                 rooms.setdefault(room, set()).add(ws)
                 roster = [
                     {"id": peer_info[o]["id"], "name": peer_info[o]["name"],
-                     "mode": peer_info[o].get("mode", "full")}
+                     "mode": peer_info[o].get("mode", "full"),
+                     "muted": bool(peer_info[o].get("muted", False)),
+                     "cameraOff": bool(peer_info[o].get("cameraOff", False))}
                     for o in rooms[room]
                     if o is not ws and peer_info[o]["name"]
                 ]
@@ -327,13 +390,19 @@ async def ws_handler(request):
                                     "room": room, "peers": roster,
                                     "history": chat_history.get(room, [])[-50:]})
                 await broadcast(room, {"type": "peer-joined", "id": peer_id,
-                                       "name": name, "mode": mode}, skip=ws)
+                                       "name": name, "mode": mode,
+                                       "muted": False, "cameraOff": False}, skip=ws)
                 print(f"{peer_id} ({name}) joined {room}")
 
             elif t in ("offer", "answer", "candidate"):
                 to_id = data.get("to")
+                my_room = peer_info[ws]["room"]
                 for o, info in peer_info.items():
-                    if info["id"] == to_id and o is not ws and info["open"]:
+                    if info["id"] != to_id or o is ws or not info["open"]:
+                        continue
+                    # same-room only: peer ids are per-room, never cross rooms
+                    if not my_room or info.get("room") != my_room:
+                        continue
                         try:
                             fwd = {"type": t, "from": peer_id}
                             if t == "candidate":
@@ -351,20 +420,27 @@ async def ws_handler(request):
                 room = peer_info[ws]["room"]
                 if not room:
                     continue
+                peer_info[ws]["muted"] = bool(data.get("muted"))
                 await broadcast(room, {"type": "mute-state", "id": peer_id,
-                                       "muted": bool(data.get("muted"))}, skip=ws)
+                                       "muted": peer_info[ws]["muted"]}, skip=ws)
 
             elif t == "camera":
                 room = peer_info[ws]["room"]
                 if not room:
                     continue
+                peer_info[ws]["cameraOff"] = bool(data.get("cameraOff"))
                 await broadcast(room, {"type": "camera-state", "id": peer_id,
-                                       "cameraOff": bool(data.get("cameraOff"))}, skip=ws)
+                                       "cameraOff": peer_info[ws]["cameraOff"]}, skip=ws)
 
             elif t == "auth":
+                ip = request.remote or "?"
+                if not auth_check(ip):
+                    await ws.send_json({"type": "admin-denied"})
+                    continue
                 pin = str(data.get("pin", ""))
                 real = read_admin_pin()
-                ok = bool(real) and pin == real
+                ok = bool(real) and hmac.compare_digest(pin, real)
+                auth_note(ip, ok)
                 peer_info[ws]["admin"] = ok
                 await ws.send_json({"type": "admin-ok" if ok else "admin-denied"})
 
@@ -408,6 +484,12 @@ async def ws_handler(request):
                                                "muted": mute_on})
                         except Exception:
                             pass
+                        # keep every client in sync, not just the target
+                        troom = info.get("room")
+                        if troom:
+                            await broadcast(troom, {"type": "mute-state",
+                                                    "id": target,
+                                                    "muted": mute_on})
                         break
 
             elif t == "typing":
@@ -463,10 +545,24 @@ async def ws_handler(request):
     return ws
 
 
+@web.middleware
+async def sec_headers(request, handler):
+    resp = await handler(request)
+    try:
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        if request.path == "/static/sw.js" or request.path == "/":
+            resp.headers["Cache-Control"] = "no-cache"
+        elif request.path.startswith("/static/"):
+            resp.headers["Cache-Control"] = "public, max-age=3600"
+    except Exception:
+        pass
+    return resp
+
+
 async def main():
     ssl_ctx = build_ssl_context()
     ice, ok = load_turn_config()
-    app = web.Application()
+    app = web.Application(middlewares=[sec_headers])
     app.router.add_get("/", index)
     app.router.add_get("/appleseed", index)
     app.router.add_get("/ws", ws_handler)
@@ -480,15 +576,15 @@ async def main():
     site = web.TCPSite(runner, BIND, PORT, ssl_context=ssl_ctx)
     await site.start()
     print(f"voice+video: https://{BIND}:{PORT} turn={'on' if ok else 'off (set turn_config.json)'}")
-    turn_proc = start_turnserver()
+    turn_proc = await start_turnserver()
     while True:
         await asyncio.sleep(60)
         if turn_proc == "external":
-            if not turn_port_busy():
-                turn_proc = start_turnserver()
+            if not await turn_port_busy():
+                turn_proc = await start_turnserver()
         elif turn_proc is not None and turn_proc.poll() is not None:
             print(f"turnserver died (rc={turn_proc.returncode}), restarting")
-            turn_proc = start_turnserver()
+            turn_proc = await start_turnserver()
 
 
 if __name__ == "__main__":

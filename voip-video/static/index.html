@@ -2,16 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Voice + Video</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#f5f5f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <style>
   :root {
+    color-scheme: light dark;
     --bg: #f5f5f7; --card: #ffffff; --ink: #1d1d1f; --muted: #6e6e73;
     --fill: #e9e9ee; --accent: #0071e3; --green: #34c759; --red: #ff3b30;
     --hair: rgba(0, 0, 0, 0.08);
@@ -53,9 +55,12 @@
   .turn-line b { color: var(--green); font-weight: 600; }
   .turn-line b.off { color: #b7791f; }
 
-  header { display: flex; align-items: center; gap: 12px; padding: 4px 0 12px; }
-  .room-title { flex: 1; }
-  .room-title h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  header { display: flex; align-items: center; gap: 12px; padding: 4px 0 calc(12px + env(safe-area-inset-top, 0px)); }
+  .room-title { flex: 1; min-width: 0; }
+  .room-title h2 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bubble { overflow-wrap: anywhere; }
+  .participant > div:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .room-title .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .badge { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
            background: var(--fill); color: var(--muted); }
@@ -75,15 +80,19 @@
                 background: rgba(0, 0, 0, 0.55); padding: 4px 12px; border-radius: 999px; }
 
   /* self view: small floating preview, FaceTime style */
-  #self-pip { position: fixed; right: 12px; bottom: 108px; width: 168px; aspect-ratio: 3/4;
+  body:has(.side.open) #self-pip { display: none; }
+  #self-pip { position: fixed; right: 12px; bottom: calc(108px + env(safe-area-inset-bottom)); width: 168px; aspect-ratio: 3/4;
               border-radius: 16px; overflow: hidden; background: #000; z-index: 40;
               border: 2px solid #fff; box-shadow: var(--shadow-lg);
               touch-action: none; cursor: grab; }
-  #btn-self-hide { position: absolute; top: 6px; left: 6px; width: 26px; height: 26px;
-                   border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff;
+  #btn-self-hide { position: absolute; top: 2px; left: 2px; width: 44px; height: 44px;
+                   border-radius: 50%; background: transparent; color: #fff;
                    border: none; display: flex; align-items: center; justify-content: center;
                    cursor: pointer; padding: 0; }
-  #btn-self-show { position: fixed; right: 12px; bottom: 170px; z-index: 40;
+  #btn-self-hide::before { content: ""; position: absolute; width: 26px; height: 26px;
+                   border-radius: 50%; background: rgba(0, 0, 0, 0.55); }
+  #btn-self-hide svg { position: relative; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); }
+  #btn-self-show { position: fixed; right: 12px; bottom: calc(170px + env(safe-area-inset-bottom)); z-index: 40;
                    width: 46px; height: 46px; border-radius: 50%; background: var(--card);
                    color: var(--accent); box-shadow: var(--shadow-lg); border: none;
                    display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -136,7 +145,7 @@
   .bubble .who { display: block; font-size: 11px; font-weight: 700; opacity: 0.75; margin-bottom: 2px; }
   .bubble .ts { display: block; font-size: 10px; opacity: 0.65; margin-top: 2px; }
   #chat-form { display: flex; gap: 8px; }
-  #chat-form input { margin: 0; font-size: 14px; padding: 10px 14px; }
+  #chat-form input { margin: 0; font-size: 16px; padding: 10px 14px; }
   #chat-form button { background: var(--accent); color: #fff; border-radius: 999px; white-space: nowrap;
                       padding: 10px 18px; font-size: 14px; }
 
@@ -150,13 +159,24 @@
   @media (max-width: 800px) {
     .view { padding: 12px; }
     .main { flex-direction: column; }
-    .side.open { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto;
-                 max-height: 62vh; z-index: 35; border-radius: 20px 20px 0 0; }
-    #videos { grid-template-columns: 1fr; }
+    .side.open { position: fixed; left: 0; right: 0; bottom: 76px; top: auto; width: auto;
+                 max-height: 62vh; z-index: 35; border-radius: 20px 20px 0 0;
+                 padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+    #videos { grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; }
+    #videos.solo { grid-template-columns: 1fr; }
+    .tile.spotlight { grid-column: auto; }
     #self-pip { width: 112px; }
     .control { min-width: 60px; min-height: 56px; }
-    .controls { gap: 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+    .controls { flex-wrap: wrap; gap: 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
     .room-title h2 { font-size: 17px; }
+  }
+  @media (max-height: 500px) and (orientation: landscape) {
+    .view { padding: 8px; }
+    .main { flex-direction: row; }
+    #self-pip { width: 96px; }
+    #self-pip .tag, #self-pip .flag { display: none; }
+    .control { min-width: 52px; min-height: 44px; }
+    .side.open { max-height: 90vh; }
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -169,7 +189,7 @@
     #self-pip { border-color: #2c2c2e; }
   }
   @media (prefers-reduced-motion: reduce) {
-    button:active { transform: none; }
+    button:active, .iconbtn:active, .control:active { transform: none; }
   }
   @media (prefers-reduced-transparency: reduce) {
     .tile .tag, .tile .flag, #self-pip .tag, #self-pip .flag { background: #000; }
@@ -185,10 +205,13 @@
   .qdot.good { background: var(--green); } .qdot.fair { background: #ff9f0a; } .qdot.bad { background: var(--red); }
   .tile.spotlight { grid-column: span 2; }
   .tile.screen .tag { background: rgba(0, 113, 227, 0.8); }
+  #videos.crowded { grid-auto-rows: minmax(0, 1fr); align-content: stretch; }
+  #videos.crowded .tile { aspect-ratio: auto; height: 100%; }
   #typing-line { font-size: 12px; color: var(--muted); min-height: 16px; font-style: italic; }
-  #toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); z-index: 50;
+  #toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50;
            background: rgba(28, 28, 30, 0.92); color: #fff; font-size: 14px; font-weight: 600;
-           padding: 10px 18px; border-radius: 999px; }
+           padding: 10px 18px; border-radius: 999px;
+           max-width: calc(100vw - 24px); text-align: center; overflow-wrap: anywhere; }
   .adminrow { display: flex; align-items: center; gap: 8px; background: var(--fill);
               border-radius: 12px; padding: 8px 10px; font-size: 14px; margin-bottom: 6px; }
   .adminrow .grow { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -196,7 +219,7 @@
           background: #fff; color: var(--accent); cursor: pointer; }
   .mini.danger { color: var(--red); }
   select.qsel { width: 100%; background: #f2f2f7; border: 1px solid transparent; border-radius: 12px;
-                padding: 12px 14px; font-size: 15px; margin-bottom: 14px; color: var(--ink); }
+                padding: 12px 14px; font-size: 16px; margin-bottom: 14px; color: var(--ink); }
   @media (prefers-color-scheme: dark) {
     select.qsel { background: #2c2c2e; color: #f5f5f7; }
     .mini { background: #2c2c2e; }
@@ -337,7 +360,8 @@ let muted = false, cameraOff = false;
 let analyser = null, speakingTimer = null;
 
 // TURN config first so login shows status
-fetch("/config").then(r => r.json()).then(c => {
+let joining = false, autoJoinTimer = null;
+const configReady = fetch("/config").then(r => r.json()).then(c => {
   iceServers = c.iceServers || iceServers;
   turnOn = !!c.turnConfigured;
   $("#turn-status").innerHTML = turnOn ? "TURN: <b>relay ready (self-hosted)</b>" : "TURN: <b class='off'>not set — direct only</b>";
@@ -357,6 +381,8 @@ const QMAP = {
 };
 
 $("#btn-join").onclick = async () => {
+  if (joining) return;
+  if (autoJoinTimer) { clearTimeout(autoJoinTimer); autoJoinTimer = null; }
   myName = $("#username").value.trim();
   room = $("#room").value.trim();
   if (!myName) {
@@ -369,13 +395,15 @@ $("#btn-join").onclick = async () => {
     $("#room").focus();
     return;
   }
+  joining = true;
+  $("#btn-join").disabled = true;
   joinRefused = false;
   wantLive = true;
   $("#login-error").textContent = "";
+  try { await configReady; } catch {}
   if (myMode === "chat") {
     cameraOff = true; muted = true;
     localStream = null;
-    saveIdentity();
     syncMuteBtn(); syncCamBtn();
     openSocket();
     return;
@@ -397,17 +425,32 @@ $("#btn-join").onclick = async () => {
       return;
     }
   }
-  saveIdentity();
   syncCamBtn();
   setupAnalyser();
   openSocket();
 };
 
 function openSocket() {
+  try { if (ws && ws.readyState <= 1) ws.close(); } catch {}
   ws = new WebSocket(WS_URL);
   ws.onopen = () => ws.send(JSON.stringify({ type: "join", room, name: myName, mode: myMode }));
   ws.onmessage = onSignal;
-  ws.onclose = () => { setConn("connecting"); if (wantLive && !joinRefused) setTimeout(openSocket, 3000); };
+  ws.onclose = () => {
+    setConn("connecting");
+    if (!me) { joining = false; $("#btn-join").disabled = false; }
+    if (wantLive && !joinRefused) setTimeout(openSocket, 3000);
+  };
+}
+
+// pending ICE candidates per peer until the PC + remote description exist
+const pendingCand = {};
+function flushCandidates(id) {
+  const pc = pcs.get(id);
+  if (!pc || !pc.remoteDescription) return;
+  const q = pendingCand[id];
+  if (!q || !q.length) return;
+  pendingCand[id] = [];
+  q.forEach(c => { try { pc.addIceCandidate(c); } catch {} });
 }
 
 function onSignal(ev) {
@@ -427,17 +470,37 @@ function onSignal(ev) {
       (m.peers || []).forEach(p => {
         peerModes[p.id] = p.mode || "full";
         addParticipant(p.id, p.name, p.mode);
+        if (p.muted) setRowState(p.id, "muted", true);
+        if (p.cameraOff) setTileFlag(p.id, true);
         if (myMode !== "chat" && (p.mode || "full") !== "chat") { addTile(p.id, p.name); offerTo(p.id); }
       });
+      saveIdentity();
+      // announce our initial state so late joiners render it correctly
+      if (cameraOff) { try { ws.send(JSON.stringify({ type: "camera", cameraOff: true })); } catch {} }
+      if (muted) { try { ws.send(JSON.stringify({ type: "mute", muted: true })); } catch {} }
+      // rejoin reconcile: drop peers absent from roster (missed peer-left),
+      // drop stale self row (server issues a new id per socket)
+      const ids = new Set((m.peers || []).map(p => p.id));
+      [...pcs.keys()].forEach(pid => { if (!ids.has(pid)) removePeer(pid); });
+      document.querySelectorAll(".participant").forEach(el => {
+        const pid = el.dataset.peer;
+        if (pid !== me && !ids.has(pid)) el.remove();
+      });
+      $("#chat-log").innerHTML = "";
       (m.history || []).forEach(addChatLine);
       setConn("live");
-      (m.peers || []).forEach(p => offerTo(p.id));
+      joining = false;
+      $("#btn-join").disabled = false;
+      // fresh ICE for reused PCs after a drop
+      [...pcs.keys()].forEach(pid => { try { pcs.get(pid).restartIce(); } catch {} });
       keepAwake();
       startQualityLoop();
       break;
     case "peer-joined":
       peerModes[m.id] = m.mode || "full";
       addParticipant(m.id, m.name, m.mode);
+      if (m.muted) setRowState(m.id, "muted", true);
+      if (m.cameraOff) setTileFlag(m.id, true);
       if (myMode !== "chat" && (m.mode || "full") !== "chat") addTile(m.id, m.name);
       break;
     case "peer-left":
@@ -445,14 +508,28 @@ function onSignal(ev) {
       break;
     case "offer": answerFrom(m.from, m.sdp); break;
     case "answer": handleAnswer(m.from, m.sdp); break;
-    case "candidate": addCandidate(m.from, m.candidate); break;
+    case "candidate":
+      if (m.candidate && typeof m.candidate === "object") {
+        const pc0 = pcs.get(m.from);
+        if (pc0 && pc0.remoteDescription) addCandidate(m.from, m.candidate);
+        else (pendingCand[m.from] = pendingCand[m.from] || []).push(m.candidate);
+      }
+      break;
     case "mute-state": setRowState(m.id, m.muted ? "muted" : "live", m.muted); break;
     case "camera-state": setTileFlag(m.id, m.cameraOff); break;
     case "chat": addChatLine(m); break;
     case "join-denied":
       joinRefused = true;
-      $("#login-error").textContent = m.reason || "Join refused";
       try { ws.close(); } catch {}
+      try { localStream?.getTracks().forEach(t => t.stop()); } catch {}
+      localStream = null;
+      joining = false;
+      $("#btn-join").disabled = false;
+      if (document.querySelector("#view-room").classList.contains("active")) {
+        resetToLogin(m.reason || "Join refused");
+      } else {
+        $("#login-error").textContent = m.reason || "Join refused";
+      }
       break;
     case "kicked":
       resetToLogin(m.reason || "Removed by admin");
@@ -466,6 +543,12 @@ function onSignal(ev) {
           try { ws.send(JSON.stringify({ type: "mute", muted: true })); } catch {}
         }
         toast("Muted by admin");
+      } else if (muted) {
+        muted = false;
+        try { localStream.getAudioTracks().forEach(t => t.enabled = true); } catch {}
+        syncMuteBtn();
+        try { ws.send(JSON.stringify({ type: "mute", muted: false })); } catch {}
+        toast("Admin asked you to unmute");
       } else {
         toast("Admin asked you to unmute");
       }
@@ -494,9 +577,15 @@ function pcFor(id) {
   if (sharing && screenStream) {
     screenStream.getTracks().forEach(t => { try { pc.addTrack(t, screenStream); } catch {} });
   }
+  // first stream per peer = camera; any other stream id = screen share
   pc.ontrack = e => {
     const stream = e.streams[0];
     if (!stream) return;
+    if (!peerStreams[id]) peerStreams[id] = stream.id;
+    if (stream.id !== peerStreams[id]) {
+      addScreenTile(id, names[id] || "?", stream);
+      return;
+    }
     const tile = document.querySelector(`.tile[data-peer="${id}"]:not(.screen)`);
     const v = tile?.querySelector("video");
     if (v && !v.srcObject) { v.srcObject = stream; return; }
@@ -510,7 +599,7 @@ function pcFor(id) {
     setRowState(id, pc.connectionState === "connected" ? "live" : pc.connectionState, false);
     if (pc.connectionState === "failed") {
       const now = Date.now();
-      if (now - (pc._lastFix || 0) > 15000) { pc._lastFix = now; fixConnections(true); }
+      if (now - (pc._lastFix || 0) > 15000) { pc._lastFix = now; fixConnections(true, id); }
     }
   };
   pcs.set(id, pc);
@@ -536,6 +625,7 @@ async function answerFrom(id, sdp) {
       try { await pc.setLocalDescription({ type: "rollback" }); } catch {}
     }
     await pc.setRemoteDescription(sdp);
+    flushCandidates(id);
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     ws.send(JSON.stringify({ type: "answer", to: id, sdp: answer }));
@@ -546,7 +636,7 @@ async function answerFrom(id, sdp) {
 async function handleAnswer(id, sdp) {
   const pc = pcs.get(id);
   if (!pc || pc.signalingState !== "have-local-offer") return;
-  try { await pc.setRemoteDescription(sdp); } catch {}
+  try { await pc.setRemoteDescription(sdp); flushCandidates(id); } catch {}
 }
 async function addCandidate(id, cand) {
   const pc = pcs.get(id);
@@ -609,6 +699,9 @@ function setRowState(id, text, dimmed) {
 function removePeer(id) {
   document.querySelectorAll(`.tile[data-peer="${id}"]`).forEach(el => el.remove());
   document.querySelector(`.participant[data-peer="${id}"]`)?.remove();
+  delete peerStreams[id];
+  delete pendingCand[id];
+  delete prevQ[id];
   const pc = pcs.get(id);
   if (pc) { try { pc.close(); } catch {} pcs.delete(id); }
   delete names[id];
@@ -620,6 +713,7 @@ function updateCount() {
   const tiles = document.querySelectorAll(".tile:not(.screen)").length;
   const screens = document.querySelectorAll(".tile.screen").length;
   document.querySelector("#videos").classList.toggle("solo", tiles === 1 && screens === 0);
+  document.querySelector("#videos").classList.toggle("crowded", tiles >= 3);
   $("#room-count").textContent = (tiles + (me ? 1 : 0)) + " in call";
 }
 function setConn(s) {
@@ -636,8 +730,9 @@ function resetPipPos() {
   pip.style.right = ""; pip.style.bottom = "";
 }
 $("#self-pip").addEventListener("pointerdown", e => {
+  if (e.target.closest("#btn-self-hide")) return;
   const pip = $("#self-pip");
-  pip.setPointerCapture(e.pointerId);
+  try { pip.setPointerCapture(e.pointerId); } catch {}
   const r = pip.getBoundingClientRect();
   pipDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
 });
@@ -663,9 +758,10 @@ $("#btn-self-show").onclick = () => {
   $("#btn-self-show").classList.add("hidden");
   $("#self-pip").classList.remove("hidden");
 };
-$("#self-pip").addEventListener("pointerup", e => {
-  pipDrag = null;
-});
+const endPipDrag = () => { pipDrag = null; };
+$("#self-pip").addEventListener("pointerup", endPipDrag);
+$("#self-pip").addEventListener("pointercancel", endPipDrag);
+$("#self-pip").addEventListener("lostpointercapture", endPipDrag);
 
 // ----- mic / camera -----
 function syncMuteBtn() {
@@ -702,6 +798,9 @@ $("#chat-form").onsubmit = e => {
   if (!text || !ws || ws.readyState !== 1) return;
   ws.send(JSON.stringify({ type: "chat", text }));
   inp.value = "";
+  clearTimeout(typingTimer);
+  typingSent = false;
+  try { ws.send(JSON.stringify({ type: "typing", typing: false })); } catch {}
 };
 function addChatLine(m) {
   const mine = m.from === me;
@@ -748,6 +847,7 @@ function setupAnalyser() {
 let joinRefused = false;
 const names = {};
 const typingNames = {};
+const peerStreams = {};
 let screenStream = null, sharing = false;
 let qualityTimer = null, lastAutoDrop = 0, badRounds = 0;
 let wakeLock = null;
@@ -782,8 +882,9 @@ function loadIdentity() {
     if (qp) $("#room").value = qp.slice(0, 32);
     renderRecent();
   } catch {}
-  if (new URLSearchParams(location.search).get("room")) {
-    setTimeout(() => { try { $("#btn-join").click(); } catch {} }, 600);
+  if (location.pathname === "/" && new URLSearchParams(location.search).get("room")
+      && $("#username").value.trim()) {
+    autoJoinTimer = setTimeout(() => { autoJoinTimer = null; try { $("#btn-join").click(); } catch {} }, 600);
   }
 }
 function renderRecent() {
@@ -850,7 +951,7 @@ async function verifyAdmin(cond, actionLabel, resend) {
     for (let i = 0; i < 3; i++) {
       await new Promise(r => setTimeout(r, 600));
       try {
-        const s = await (await fetch("/stats")).json();
+        const s = await (await fetch("/stats", { headers: { "X-Admin-Pin": adminPin } })).json();
         if (cond(s)) { toast(actionLabel + " confirmed"); return; }
       } catch {}
     }
@@ -858,11 +959,21 @@ async function verifyAdmin(cond, actionLabel, resend) {
   }
   toast(actionLabel + " not confirmed — retry");
 }
+let adminPin = "";
 $("#btn-admin-auth").onclick = () => {
   const pin = $("#admin-pin").value.trim();
   if (!pin) return;
+  adminPin = pin;
   try { adminWs?.close(); } catch {}
   adminWs = new WebSocket(WS_URL);
+  adminWs.onclose = adminWs.onerror = () => {
+    adminAuthed = false;
+    if (adminPoll) clearInterval(adminPoll);
+    adminPoll = null;
+    $("#admin-panel").classList.add("hidden");
+    $("#admin-login").classList.remove("hidden");
+    $("#admin-error").textContent = "Admin connection lost — sign in again";
+  };
   adminWs.onopen = () => adminWs.send(JSON.stringify({ type: "auth", pin }));
   adminWs.onmessage = ev => {
     let m;
@@ -884,7 +995,8 @@ $("#btn-admin-auth").onclick = () => {
 async function loadAdmin() {
   const box = $("#admin-rooms");
   try {
-    const s = await (await fetch("/stats")).json();
+    const s = await (await fetch("/stats", { headers: { "X-Admin-Pin": adminPin } })).json();
+    if (s.error) { box.innerHTML = "<div class='sub'>Admin auth required.</div>"; return; }
     const entries = Object.entries(s.rooms || {});
     box.innerHTML = "";
     if (!entries.length) box.innerHTML = "<div class='sub'>No live rooms.</div>";
@@ -921,7 +1033,14 @@ async function loadAdmin() {
         who.className = "grow"; who.textContent = p.name;
         const muteB = document.createElement("button");
         muteB.className = "mini"; muteB.textContent = "Mute";
-        muteB.onclick = () => { if (adminSend({ type: "force-mute", target: p.id, muted: true })) toast(`Muting ${p.name}…`); };
+        muteB.onclick = () => {
+          const msg = { type: "force-mute", target: p.id, muted: true };
+          if (!adminSend(msg)) return;
+          setTimeout(loadAdmin, 600);
+          verifyAdmin(
+            s => Object.values(s.rooms || {}).flat().some(q => q.id === p.id && q.muted),
+            `${p.name} muted`, msg);
+        };
         const kickB = document.createElement("button");
         kickB.className = "mini danger"; kickB.textContent = "Kick";
         kickB.onclick = () => {
@@ -958,18 +1077,18 @@ $("#btn-screen").onclick = async () => {
   for (const id of [...pcs.keys()]) { try { await reoffer(id); } catch {} }
   addScreenTile(me, (myName || "?") + " (you)", screenStream);
 };
-async function reoffer(id) {
+async function reoffer(id, ice = false) {
   const pc = pcs.get(id);
   if (!pc || myMode === "chat" || peerModes[id] === "chat" || !localStream) return;
   if (pc.signalingState !== "stable") {
     if (!pc._reofferQueued) {
       pc._reofferQueued = true;
-      setTimeout(() => { pc._reofferQueued = false; reoffer(id); }, 800);
+      setTimeout(() => { pc._reofferQueued = false; reoffer(id, ice); }, 800);
     }
     return;
   }
   try {
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer(ice ? { iceRestart: true } : undefined);
     await pc.setLocalDescription(offer);
     ws.send(JSON.stringify({ type: "offer", to: id, sdp: offer }));
   } catch { /* retry on next trigger */ }
@@ -1011,10 +1130,13 @@ function addScreenTile(id, label, stream) {
 
 // ----- ICE restart: manual + automatic -----
 $("#btn-fix").onclick = () => fixConnections(false);
-async function fixConnections(auto) {
+async function fixConnections(auto, onlyId = null) {
   let n = 0;
   for (const [id, pc] of pcs) {
-    try { pc.restartIce(); await reoffer(id); n++; } catch {}
+    if (onlyId && id !== onlyId) continue;
+    // manual Fix without a target: only touch legs that are not healthy
+    if (!onlyId && !auto && pc.connectionState === "connected") continue;
+    try { await reoffer(id, true); n++; } catch {}
   }
   if (!auto) toast(n ? "Reconnecting…" : "Nothing to fix");
   return n;
@@ -1029,6 +1151,7 @@ function stopQualityLoop() {
   if (qualityTimer) clearInterval(qualityTimer);
   qualityTimer = null;
 }
+const prevQ = {}; // per-peer last {recv, lost} for interval loss
 async function pollQuality() {
   let worstRtt = 0, worstLoss = 0, loudest = null, loudestLevel = 0.03;
   for (const [id, pc] of pcs) {
@@ -1041,7 +1164,11 @@ async function pollQuality() {
         }
         if (s.type === "inbound-rtp" && s.kind === "audio" && !s.isRemote) {
           const recv = s.packetsReceived || 0, lost = s.packetsLost || 0;
-          if (recv + lost > 0) loss = Math.max(loss, lost / (recv + lost) * 100);
+          const prev = prevQ[id] || { recv: 0, lost: 0 };
+          const dRecv = recv - prev.recv, dLost = lost - prev.lost;
+          if (dRecv + dLost > 0 && dRecv >= 0 && dLost >= 0)
+            loss = Math.max(loss, dLost / (dRecv + dLost) * 100);
+          prevQ[id] = { recv, lost };
           if (typeof s.audioLevel === "number") level = Math.max(level, s.audioLevel);
         }
       });
@@ -1116,6 +1243,12 @@ $("#btn-leave").onclick = () => resetToLogin();
 function resetToLogin(msg) {
   try { ws.send(JSON.stringify({ type: "leave" })); } catch {}
   try { ws.close(); } catch {}
+  clearTimeout(typingTimer);
+  typingSent = false;
+  wantLive = false;
+  joining = false;
+  const bj = $("#btn-join");
+  if (bj) bj.disabled = false;
   pcs.forEach(pc => { try { pc.close(); } catch {} });
   pcs.clear();
   try { localStream?.getTracks().forEach(t => t.stop()); } catch {}
