@@ -1,0 +1,84 @@
+# Auto-build signed release APK on version tags (e.g. v3.5.0) + attach to
+# the GitHub Release. Manual trigger supported via workflow_dispatch.
+# Signing: release keystore from secrets when present, else fresh debug key.
+# Secrets (optional, for real release signature):
+#   VOICE_STORE_FILE_B64, VOICE_STORE_PASSWORD, VOICE_KEY_ALIAS, VOICE_KEY_PASSWORD
+name: Build release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK packages
+        run: |
+          sdkmanager "platforms;android-31" "platforms;android-34" "build-tools;34.0.0"
+          yes | sdkmanager --licenses > /dev/null
+
+      - name: Set up Flutter 3.24.4
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.4"
+
+      - name: Fetch packages
+        run: flutter pub get
+
+      - name: Keystore (env release key or fresh debug key)
+        run: |
+          if [ -n "$VOICE_STORE_FILE_B64" ]; then
+            echo "$VOICE_STORE_FILE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "VOICE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          else
+            keytool -genkeypair -keystore android/debug.keystore \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10950 \
+              -storepass android -keypass android \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+        env:
+          VOICE_STORE_FILE_B64: ${{ secrets.VOICE_STORE_FILE_B64 }}
+
+      - name: Build release APK
+        run: flutter build apk --release
+        env:
+          VOICE_STORE_PASSWORD: ${{ secrets.VOICE_STORE_PASSWORD }}
+          VOICE_KEY_ALIAS: ${{ secrets.VOICE_KEY_ALIAS }}
+          VOICE_KEY_PASSWORD: ${{ secrets.VOICE_KEY_PASSWORD }}
+
+      - name: Stage artifacts
+        run: |
+          cp build/app/outputs/apk/release/app-release.apk voice.apk
+          sha256sum voice.apk > voice.apk.sha256
+          cat voice.apk.sha256
+
+      - name: Attach to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="manual-${GITHUB_SHA::7}"
+          fi
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Automated release build."
+          gh release upload "$TAG" voice.apk voice.apk.sha256 --clobber
